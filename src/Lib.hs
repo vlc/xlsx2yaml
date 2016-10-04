@@ -3,6 +3,10 @@
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RecordWildCards           #-}
 
+{-# LANGUAGE FlexibleInstances           #-}
+
+{-# OPTIONS_GHC -Wno-orphans           #-}
+
 module Lib (main, readSheet) where
 
 import           Codec.Xlsx
@@ -11,12 +15,14 @@ import           Control.Monad.State
 import qualified Data.Aeson           as JSON
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as L
+import Control.Monad.Trans.Except
 import qualified Data.Map.Strict      as M
 import           Data.Maybe           (fromMaybe)
 import           Data.Monoid          ((<>))
 import qualified Data.Text            as T
 import qualified Data.Yaml            as YAML
 import           Options.Generic
+import qualified Data.List.NonEmpty as NE
 import           System.Exit
 
 -- | Extract a YAML file from an XLSX thingo
@@ -25,37 +31,45 @@ import           System.Exit
 
 data Opts = Opts
   { xlsx :: FilePath
-  , sheet :: T.Text
+  , sheet :: NE.NonEmpty (T.Text)
   , output :: FilePath
   , beginDataRow :: Maybe Int
   , blanksBeforeStopping :: Maybe Int
   } deriving (Eq, Show, Generic)
 instance ParseRecord Opts
 
+instance ParseField a => ParseFields (NE.NonEmpty a) where
+    parseFields h m = (NE.:|) <$> parseField h m <*> parseListOfField h m
+
+instance ParseField a => ParseRecord (NE.NonEmpty a) where
+  parseRecord = fmap getOnly parseRecord
+
 main :: IO ()
 main = do
   Opts {..} <- getRecord "xlsx2yaml - extract data from xlsx into yaml"
+  print sheet
   -- Parameters
   let inFile = xlsx
-      sheetToExtract = sheet
       outFile = output
       dataStartRow = fromMaybe 4 beginDataRow
       numSkipsBeforeStopping = fromMaybe 10 blanksBeforeStopping
   --
-  r <- readSheet numSkipsBeforeStopping dataStartRow inFile sheetToExtract
+  r <- runExceptT $ traverse (readSheet numSkipsBeforeStopping dataStartRow inFile) sheet
   case r of
-    Just done -> BS.writeFile outFile (YAML.encode done)
-    Nothing -> do
-      putStrLn $ "failed to find sheet " <> show sheetToExtract
+    Right done -> BS.writeFile outFile (YAML.encode (JSON.object (NE.toList done)))
+    Left v -> do
+      putStrLn $ "failed to find sheet " <> show v
       exitFailure
 
-readSheet :: (Num t, Enum t, Ord t) => t -> Int -> FilePath -> Text -> IO (Maybe YAML.Value)
+readSheet :: (Num t, Enum t, Ord t) => t -> Int -> FilePath -> Text -> ExceptT T.Text IO (T.Text, YAML.Value)
 readSheet numSkipsBeforeStopping dataStartRow inFile sheetToExtract =
   let mkValue sheet =
         let sheetValue = sheetToValue numSkipsBeforeStopping dataStartRow sheet
-        in JSON.object [(sheetToExtract, sheetValue)]
-  in do ss <- toXlsx <$> L.readFile inFile
-        pure $ fmap mkValue (ss ^? ixSheet sheetToExtract)
+        in (sheetToExtract, sheetValue)
+  in do ss <- liftIO $ toXlsx <$> L.readFile inFile
+        case ss ^? ixSheet sheetToExtract of
+          Just x -> pure (mkValue x)
+          Nothing -> throwE sheetToExtract
 
 -- | Encode a worksheet as a JSON Object.
 -- First row is fields. Data rows start at R. Stop when you encounter Y blank rows

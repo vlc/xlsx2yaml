@@ -4,13 +4,14 @@ import qualified Lib            as Lib
 import qualified Data.Aeson as JSON
 import Control.Monad (unless)
 import Data.Aeson ((.=))
+import Control.Monad.Trans.Except
 
 main :: IO ()
 main = do
-  Just brews <-
+  Right brews <- runExceptT $
     Lib.readSheet (10 :: Int) (2 :: Int) "test/sample-inputs/Brews.xlsx" "Brews"
 
-  let expected = JSON.object [
+  let expected =
                     ("Brews" .=
                     [JSON.object ["style" .= JSON.String "ipa",
                                   "rating" .= JSON.Number 8.0,
@@ -19,7 +20,6 @@ main = do
                                   "rating" .= JSON.Number 9.0,
                                   "name" .= JSON.String "fanta pants"]]
                     )
-                    ]
 
   unless (brews == expected) $
    do putStrLn "Bad interpretation of Brews.xlsx"
