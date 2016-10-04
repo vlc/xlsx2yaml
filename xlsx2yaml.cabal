@@ -1,0 +1,50 @@
+name:                xlsx2yaml
+version:             0.1.0.0
+synopsis:            Initial project template from stack
+description:         Please see README.md
+homepage:            https://github.com/nkpart/xlsx2yaml#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Nick Partridge
+maintainer:          nkpart@gmail.com
+copyright:           2016 Nick Partridge
+category:            Web
+build-type:          Simple
+-- extra-source-files:
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Lib
+  build-depends:       base >= 4.7 && < 5
+                     , xlsx
+                     , optparse-generic
+                     , lens
+                     , mtl
+                     , bytestring
+                     , aeson
+                     , yaml
+                     , text
+                     , containers
+  default-language:    Haskell2010
+
+executable xlsx2yaml
+  hs-source-dirs:      app
+  main-is:             Main.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N -O2
+  build-depends:       base
+                     , xlsx2yaml
+  default-language:    Haskell2010
+
+test-suite xlsx2yaml-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , xlsx2yaml
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+source-repository head
+  type:     git
+  location: https://github.com/nkpart/xlsx2yaml
