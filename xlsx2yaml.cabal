@@ -1,8 +1,8 @@
 name:                xlsx2yaml
 version:             0.1.0.0
-synopsis:            Initial project template from stack
+synopsis:            Extracts data from XLSX sheets into YAML
 description:         Please see README.md
-homepage:            https://github.com/nkpart/xlsx2yaml#readme
+homepage:            https://github.com/vlc/xlsx2yaml
 license:             BSD3
 license-file:        LICENSE
 author:              Nick Partridge
@@ -10,7 +10,6 @@ maintainer:          nkpart@gmail.com
 copyright:           2016 Nick Partridge
 category:            Web
 build-type:          Simple
--- extra-source-files:
 cabal-version:       >=1.10
 
 library

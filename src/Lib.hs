@@ -8,7 +8,6 @@ module Lib (main) where
 import           Codec.Xlsx
 import           Control.Lens
 import           Control.Monad.State
-import Debug.Trace
 import qualified Data.Aeson           as JSON
 import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as L
@@ -16,7 +15,9 @@ import qualified Data.Map.Strict      as M
 import           Data.Maybe           (fromMaybe)
 import qualified Data.Text            as T
 import qualified Data.Yaml            as YAML
+import           Debug.Trace
 import           Options.Generic
+import           System.Exit
 
 -- | Extract a YAML file from an XLSX thingo
 -- The first row of a sheet should have field names
@@ -42,10 +43,14 @@ main = do
       numSkipsBeforeStopping = fromMaybe 10 blanksBeforeStopping
   --
   ss <- toXlsx <$> L.readFile inFile
-  let Just sheet = ss ^? ixSheet sheetToExtract
-      sheetValue = sheetToValue numSkipsBeforeStopping dataStartRow sheet
-      combinedValue = JSON.object [(sheetToExtract, sheetValue)]
-  BS.writeFile outFile (YAML.encode combinedValue)
+  case ss ^? ixSheet sheetToExtract of
+    Just sheet ->
+        let sheetValue = sheetToValue numSkipsBeforeStopping dataStartRow sheet
+            combinedValue = JSON.object [(sheetToExtract, sheetValue)]
+         in BS.writeFile outFile (YAML.encode combinedValue)
+    Nothing ->
+      do putStrLn $ "failed to find sheet " <> show ss
+         exitFailure
 
 -- | Encode a worksheet as a JSON Object.
 -- First row is fields. Data rows start at R. Stop when you encounter Y blank rows
