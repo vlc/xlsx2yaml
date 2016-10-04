@@ -13,6 +13,7 @@ import qualified Data.ByteString      as BS
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Map.Strict      as M
 import           Data.Maybe           (fromMaybe)
+import           Data.Monoid          ((<>))
 import qualified Data.Text            as T
 import qualified Data.Yaml            as YAML
 import           Debug.Trace
