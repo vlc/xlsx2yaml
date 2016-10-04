@@ -1,2 +1,9 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+import qualified Lib            as Lib
+
 main :: IO ()
-main = putStrLn "Test suite not yet implemented"
+main = do
+  Just _ <-
+    Lib.readSheet 4 10 "test/sample-inputs/Design Specification.xlsx" "MASTER"
+  pure ()
