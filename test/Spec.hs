@@ -7,9 +7,6 @@ import Data.Aeson ((.=))
 
 main :: IO ()
 main = do
-  Just _ <-
-    Lib.readSheet (10 :: Int) (4 :: Int) "test/sample-inputs/Design Specification.xlsx" "MASTER"
-
   Just brews <-
     Lib.readSheet (10 :: Int) (2 :: Int) "test/sample-inputs/Brews.xlsx" "Brews"
 
