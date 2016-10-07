@@ -54,22 +54,28 @@ main = do
       dataStartRow = fromMaybe 4 beginDataRow
       numSkipsBeforeStopping = fromMaybe 10 blanksBeforeStopping
   --
-  r <- runExceptT $ traverse (readSheet numSkipsBeforeStopping dataStartRow inFile) sheet
+  xlsxx <- toXlsx <$> L.readFile inFile
+  r <- runExceptT $ traverse (readSheet' numSkipsBeforeStopping dataStartRow xlsxx) sheet
   case r of
     Right done -> BS.writeFile outFile (YAML.encode (JSON.object (NE.toList done)))
     Left v -> do
       putStrLn $ "failed to find sheet " <> show v
       exitFailure
 
+-- used in testing
 readSheet :: (Num t, Enum t, Ord t) => t -> Int -> FilePath -> Text -> ExceptT T.Text IO (T.Text, YAML.Value)
 readSheet numSkipsBeforeStopping dataStartRow inFile sheetToExtract =
+     do ss <- liftIO $ toXlsx <$> L.readFile inFile
+        readSheet' numSkipsBeforeStopping dataStartRow ss sheetToExtract
+
+readSheet' :: (Num t, Enum t, Ord t, Monad m) => t -> Int -> Xlsx -> Text -> ExceptT Text m (Text, YAML.Value)
+readSheet' numSkipsBeforeStopping dataStartRow ss sheetToExtract =
   let mkValue sheet =
         let sheetValue = sheetToValue numSkipsBeforeStopping dataStartRow sheet
         in (sheetToExtract, sheetValue)
-  in do ss <- liftIO $ toXlsx <$> L.readFile inFile
-        case ss ^? ixSheet sheetToExtract of
-          Just x -> pure (mkValue x)
-          Nothing -> throwE sheetToExtract
+  in case ss ^? ixSheet sheetToExtract of
+       Just x -> pure (mkValue x)
+       Nothing -> throwE sheetToExtract
 
 -- | Encode a worksheet as a JSON Object.
 -- First row is fields. Data rows start at R. Stop when you encounter Y blank rows
