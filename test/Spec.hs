@@ -15,10 +15,14 @@ main = do
                     ("Brews" .=
                     [JSON.object ["style" .= JSON.String "ipa",
                                   "rating" .= JSON.Number 8.0,
-                                  "name" .= JSON.String "hop hog"],
+                                  "name" .= JSON.String "hop hog",
+                                  "colour" .= JSON.String "FFFFC000"
+                                 ],
                       JSON.object ["style" .= JSON.String "american amber",
                                   "rating" .= JSON.Number 9.0,
-                                  "name" .= JSON.String "fanta pants"]]
+                                  "name" .= JSON.String "fanta pants",
+                                  "colour" .= JSON.String "FFC600AE"
+                                  ]]
                     )
 
   unless (brews == expected) $
