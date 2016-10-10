@@ -1,29 +1,37 @@
 {-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE FlexibleContexts          #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RecordWildCards           #-}
 
-{-# LANGUAGE FlexibleInstances           #-}
+{-# LANGUAGE FlexibleInstances         #-}
 
 {-# OPTIONS_GHC -Wno-orphans           #-}
 
 module Lib (main, readSheet) where
 
 import           Codec.Xlsx
+import           Codec.Xlsx.Formatted
+import           Control.Applicative        ((<|>))
+import           Control.Exception          (throw)
 import           Control.Lens
-import           Control.Monad.State
-import qualified Data.Aeson           as JSON
-import qualified Data.ByteString      as BS
-import qualified Data.ByteString.Lazy as L
-import Control.Monad.Trans.Except
-import qualified Data.Map.Strict      as M
-import           Data.Maybe           (fromMaybe)
-import           Data.Monoid          ((<>))
-import qualified Data.Text            as T
-import qualified Data.Yaml            as YAML
-import           Options.Generic
-import qualified Data.List.NonEmpty as NE
-import           System.Exit
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.State        (evalState, put)
+import           Control.Monad.Trans.Except (ExceptT, runExceptT, throwE)
+import qualified Data.Aeson                 as JSON
+import qualified Data.ByteString            as BS
+import qualified Data.ByteString.Lazy       as L
+import qualified Data.List.NonEmpty         as NE
+import qualified Data.Map.Strict            as M
+import           Data.Maybe                 (fromMaybe)
+import           Data.Monoid                ((<>))
+import           Data.Text                  (Text)
+import qualified Data.Text                  as T
+import qualified Data.Yaml                  as YAML
+import           Options.Generic            (Generic, ParseField (..),
+                                             ParseFields (..), ParseRecord (..),
+                                             getOnly, getRecord)
+import           System.Exit                (exitFailure)
 
 -- | Extract a YAML file from an XLSX thingo
 -- The first row of a sheet should have field names
@@ -34,9 +42,11 @@ data Opts = Opts
   , sheet :: NE.NonEmpty (T.Text)
   , output :: FilePath
   , beginDataRow :: Maybe Int
-  , blanksBeforeStopping :: Maybe Int
   } deriving (Eq, Show, Generic)
 instance ParseRecord Opts
+
+type Row k v = M.Map k v
+type Sheet r c v = M.Map (r, c) v
 
 instance ParseField a => ParseFields (NE.NonEmpty a) where
     parseFields h m = (NE.:|) <$> parseField h m <*> parseListOfField h m
@@ -52,26 +62,37 @@ main = do
   let inFile = xlsx
       outFile = output
       dataStartRow = fromMaybe 4 beginDataRow
-      numSkipsBeforeStopping = fromMaybe 10 blanksBeforeStopping
   --
-  xlsxx <- toXlsx <$> L.readFile inFile
-  r <- runExceptT $ traverse (readSheet' numSkipsBeforeStopping dataStartRow xlsxx) sheet
+  (xlsxx, styles) <- readXlsxFile inFile
+  r <- runExceptT $ traverse (readSheet' dataStartRow styles xlsxx) sheet
   case r of
     Right done -> BS.writeFile outFile (YAML.encode (JSON.object (NE.toList done)))
     Left v -> do
       putStrLn $ "failed to find sheet " <> show v
       exitFailure
 
--- used in testing
-readSheet :: (Num t, Enum t, Ord t) => t -> Int -> FilePath -> Text -> ExceptT T.Text IO (T.Text, YAML.Value)
-readSheet numSkipsBeforeStopping dataStartRow inFile sheetToExtract =
-     do ss <- liftIO $ toXlsx <$> L.readFile inFile
-        readSheet' numSkipsBeforeStopping dataStartRow ss sheetToExtract
+readXlsxFile :: FilePath -> IO (Xlsx, StyleSheet)
+readXlsxFile inFile = do
+  xlsxx <- toXlsx <$> L.readFile inFile
+  styles <-
+    case parseStyleSheet (_xlStyles xlsxx) of
+      Left e -> throw e
+      Right v -> pure v
+  pure (xlsxx, styles)
 
-readSheet' :: (Num t, Enum t, Ord t, Monad m) => t -> Int -> Xlsx -> Text -> ExceptT Text m (Text, YAML.Value)
-readSheet' numSkipsBeforeStopping dataStartRow ss sheetToExtract =
+-- used in testing
+readSheet :: Int -> FilePath -> Text -> ExceptT T.Text IO (T.Text, YAML.Value)
+readSheet dataStartRow inFile sheetToExtract =
+     do (ss, styles) <- liftIO $ readXlsxFile inFile
+        readSheet' dataStartRow styles ss sheetToExtract
+
+readSheet'
+  :: Monad m
+  => Int -> StyleSheet -> Xlsx -> Text -> ExceptT Text m (Text, YAML.Value)
+readSheet' dataStartRow styles ss sheetToExtract =
   let mkValue sheet =
-        let sheetValue = sheetToValue numSkipsBeforeStopping dataStartRow sheet
+        let sheetValue =
+              sheetToValue dataStartRow styles sheet
         in (sheetToExtract, sheetValue)
   in case ss ^? ixSheet sheetToExtract of
        Just x -> pure (mkValue x)
@@ -80,30 +101,28 @@ readSheet' numSkipsBeforeStopping dataStartRow ss sheetToExtract =
 -- | Encode a worksheet as a JSON Object.
 -- First row is fields. Data rows start at R. Stop when you encounter Y blank rows
 sheetToValue
-  :: (Ord t, Num t, Enum t)
-  => t -> Int -> Worksheet -> JSON.Value
-sheetToValue badsUntil dataStart sheet =
-  let fields = readFieldNames goodCells
-      dataRows = extractDefinedRows badsUntil dataStart goodCells
-      goodCells = definedCellValues sheet
+  :: Int -> StyleSheet -> Worksheet -> JSON.Value
+sheetToValue dataStart styles sheet =
+  let fields = readFieldNames . extractRow 1 . _wsCells $ sheet
+      dataRows = extractDefinedRows dataStart goodCells
+      goodCells = definedCellValues styles sheet
   in JSON.toJSON $ fmap (JSON.object . mailMerge fields) dataRows
 
+-- | Merge field names with a row of cells, into the contents of a JSON Object
 mailMerge
-  :: (Ord k1)
-  => M.Map k1 k -> M.Map k1 CellValue -> [(k, JSON.Value)]
+  :: Ord k1
+  => Row k1 k -> Row k1 OkCell -> [(k, JSON.Value)]
 mailMerge fields =
   M.elems .
   M.intersectionWith f fields
-  where f fieldName value = (fieldName, cellValueToValue value)
+  where f fieldName value = (fieldName, okCellToValue value)
 
-readFieldNames
-  :: (Ord c, Num r, Eq r)
-  => M.Map (r, c) CellValue -> M.Map c T.Text
+readFieldNames :: Row k Cell -> Row k Text
 readFieldNames cellsX =
-  let cells = M.mapMaybe (^? _CellText) cellsX
-   in extractRow 1 cells
+  M.mapMaybe (^? cellValue . _Just . _CellText) cellsX
 
-extractRow :: (Ord k2, Eq a1) => a1 -> M.Map (a1, k2) a -> M.Map k2 a
+extractRow :: (Ord k2, Eq a1) => a1 -> Sheet a1 k2 a -> Row k2 a
+-- extractRow :: (Ord k2, Eq a1) => a1 -> M.Map (a1, k2) a -> M.Map k2 a
 extractRow selectedRow =
   M.mapKeys snd . M.filterWithKey (\rc _ -> fst rc == selectedRow)
 
@@ -111,10 +130,12 @@ extractRow selectedRow =
 -- Once enough (10) rows that are not defined have been found, we
 -- stop searching
 extractDefinedRows
-  :: (Ord c, Num r, Num c, Eq r, Enum z, Ord z, Num z)
-  => z -> r -> M.Map (r, c) CellValue -> [M.Map c CellValue]
-extractDefinedRows stopWhenBadsIs startRow sheet = evalState (action startRow) 0
+  :: (Ord c, Num r, Num c, Eq r)
+  => r -> M.Map (r, c) x -> [M.Map c x]
+extractDefinedRows startRow sheet =
+  evalState (action startRow) 0
   where
+    stopWhenBadsIs = 100 :: Int -- will stop extracting rows when we encounter this many blanks in a row
     action rowNum = do
       let row = extractRow rowNum sheet
           firstCell = row ^? ix 1
@@ -125,12 +146,32 @@ extractDefinedRows stopWhenBadsIs startRow sheet = evalState (action startRow) 0
             then pure []
             else action (rowNum + 1)
         Just _ -> do
+          put 0 -- reset the empty row counter
           rest <- action (rowNum + 1)
           pure (row : rest)
 
-definedCellValues :: Worksheet -> M.Map (Int, Int) CellValue
-definedCellValues =
-  M.mapMaybe _cellValue . _wsCells
+data OkCell =
+  OkCellValue CellValue | OkFilled Fill
+
+definedCellValues :: StyleSheet -> Worksheet -> M.Map (Int, Int) OkCell
+definedCellValues ss ws =
+  let formattedCells' = toFormattedCells (_wsCells ws) [] ss
+      p cell =
+         (OkCellValue <$> _formattedValue cell) <|> (OkFilled <$> _formattedFill cell)
+
+   in M.mapMaybe p formattedCells'
+
+-- | Rendering to YAML/JSON
+
+okCellToValue :: OkCell -> YAML.Value
+okCellToValue (OkCellValue v) = cellValueToValue v
+okCellToValue (OkFilled fill) = JSON.String (fillToValue fill)
+
+-- | Fill as a string, if any of these accessors are Nothing, we get an empty string
+fillToValue :: Fill -> Text
+fillToValue f =
+  -- Assume: For solid cell fills (no pattern), fgColor is used
+  f ^. fillPattern . _Just . fillPatternFgColor . _Just . colorARGB . _Just
 
 cellValueToValue :: CellValue -> JSON.Value
 cellValueToValue (CellText t) = JSON.String t

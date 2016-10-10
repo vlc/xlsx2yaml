@@ -9,7 +9,7 @@ import Control.Monad.Trans.Except
 main :: IO ()
 main = do
   Right brews <- runExceptT $
-    Lib.readSheet (10 :: Int) (2 :: Int) "test/sample-inputs/Brews.xlsx" "Brews"
+    Lib.readSheet (2 :: Int) "test/sample-inputs/Brews.xlsx" "Brews"
 
   let expected =
                     ("Brews" .=
