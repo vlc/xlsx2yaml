@@ -28,36 +28,19 @@ import           Data.Monoid                ((<>))
 import           Data.Text                  (Text)
 import qualified Data.Text                  as T
 import qualified Data.Yaml                  as YAML
-import           Options.Generic            (Generic, ParseField (..),
-                                             ParseFields (..), ParseRecord (..),
-                                             getOnly, getRecord)
+import           Options.Generic            (getRecord)
 import           System.Exit                (exitFailure)
+import Xlsx2Yaml.CLI
 
 -- | Extract a YAML file from an XLSX thingo
 -- The first row of a sheet should have field names
 -- data rows must have a key in the first column
-
-data Opts = Opts
-  { xlsx :: FilePath
-  , sheet :: NE.NonEmpty (T.Text)
-  , output :: FilePath
-  , beginDataRow :: Maybe Int
-  } deriving (Eq, Show, Generic)
-instance ParseRecord Opts
-
 type Row k v = M.Map k v
 type Sheet r c v = M.Map (r, c) v
 
-instance ParseField a => ParseFields (NE.NonEmpty a) where
-    parseFields h m = (NE.:|) <$> parseField h m <*> parseListOfField h m
-
-instance ParseField a => ParseRecord (NE.NonEmpty a) where
-  parseRecord = fmap getOnly parseRecord
-
 main :: IO ()
 main = do
-  Opts {..} <- getRecord "xlsx2yaml - extract data from xlsx into yaml"
-  print sheet
+  Xlsx2YamlOpts {..} <- getRecord "xlsx2yaml - extract data from xlsx into yaml"
   -- Parameters
   let inFile = xlsx
       outFile = output
