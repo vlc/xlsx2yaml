@@ -1,6 +1,6 @@
-{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# OPTIONS_GHC -Wwarn             #-}
 
-{-# OPTIONS_GHC -Wno-warn-orphans           #-}
 module Xlsx2Yaml.CLI where
 
 import qualified Data.List.NonEmpty  as NE
@@ -20,7 +20,6 @@ instance ParseRecord Xlsx2YamlOpts
 
 parseXlsx2YamlOpts :: Parser Xlsx2YamlOpts
 parseXlsx2YamlOpts = parseRecord
-
 
 -- Orphans, NonEmpty parsers for optparse-generic
 
