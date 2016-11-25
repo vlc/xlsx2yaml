@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 # Project Config
-$dlls = @("libgcc_s_seh-1.dll", "libsodium-13.dll", "libstdc++-6.dll", "libwinpthread-1.dll")
+$dlls = @("libgcc_s_seh-1.dll", "libsodium-18.dll", "libstdc++-6.dll", "libwinpthread-1.dll")
 $built_exes = @("xlsx2yaml.exe")
 $project = "xlsx2yaml"
 $target = "xlsx2yaml"
