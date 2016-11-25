@@ -3,10 +3,7 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RecordWildCards           #-}
-
 {-# LANGUAGE FlexibleInstances         #-}
-
-{-# OPTIONS_GHC -Wno-orphans           #-}
 
 module Lib (main, readSheet) where
 

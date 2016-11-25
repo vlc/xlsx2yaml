@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric             #-}
 
-{-# OPTIONS_GHC -Wno-orphans           #-}
+{-# OPTIONS_GHC -Wno-warn-orphans           #-}
 module Xlsx2Yaml.CLI where
 
 import qualified Data.List.NonEmpty  as NE
