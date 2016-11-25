@@ -65,12 +65,12 @@ $built_exes |`
     if (!$?) { throw "$_ failed to --help, maybe a dll is missing?" }
   }
 
-echo "Creating pkg/$project.zip"
+echo "Creating pkg/$($project)_windows.zip"
 
 $xs = Get-ChildItem -path pkg
 echo "Adding to package: $($xs -join ", ")"
 Push-Location "pkg"
-& stack exec -- zip -D "$project.zip" $xs
+& stack exec -- zip -D "$($project)_windows.zip" $xs
 Pop-Location
 
 echo "----------------"
